@@ -1,0 +1,140 @@
+function (dest, pipeOpts) {
+  var src = this;
+  var state = this._readableState;
+
+  switch (state.pipesCount) {
+    case 0:
+      state.pipes = dest;
+      break;
+    case 1:
+      state.pipes = [state.pipes, dest];
+      break;
+    default:
+      state.pipes.push(dest);
+      break;
+  }
+  state.pipesCount += 1;
+  debug(\'pipe count=%d opts=%j\', state.pipesCount,pipeOpts);
+
+  var doEnd = (!pipeOpts || pipeOpts.end !== false) &&
+              dest !== process.stdout &&
+              dest !== process.stderr;
+
+  var endFn = doEnd ? onend : cleanup;
+  if (state.endEmitted)
+    process.nextTick(endFn);
+  else
+    src.once('end', endFn);
+
+  dest.on('unpipe', onunpipe);
+  function onunpipe(readable) {
+    debug('onunpipe');
+   if (readable === src) {
+      cleanup();
+    }
+  }
+
+  function onend() {
+    debug(\'onend\');
+    dest.end();
+  }
+
+  // when the dest drains, it reduces the awaitDrain counter
+ // on the source.  This would be more elegant with a .once()
+  // handler in flow(), but adding and removing repeatedly is
+  // too slow.
+  var ondrain = pipeOnDrain(src);
+  dest.on('drain', ondrain);
+
+  var cleanedUp = false;
+  function cleanup() {
+    debug(\'cleanup\');
+    // cleanup event handlers once the pipe is broken
+    dest.removeListener(\'close\', onclose);
+    dest.removeListener(\'finish\', onfinish);
+    dest.removeListener(\'drain\', ondrain);
+    dest.removeListener(\'error\', onerror);
+    dest.removeListener(\'unpipe\', onunpipe);
+   src.removeListener(\'end\', onend);
+    src.removeListener(\'end\', cleanup);
+    src.removeListener(\'data\', ondata);
+
+    cleanedUp = true;
+
+    // if the reader is waiting for a drain event from this
+    // specific writer, then it would cause it to never start
+    // flowing again.
+    // So, if this is awaiting a drain, then we just call it now.
+    // If we don\'t know, then assume that we are waiting for one.
+    if (state.awaitDrain &&
+        (!dest._writableState || dest._writableState.needDrain))
+      ondrain();
+  }
+
+  src.on(\'data\', ondata);
+  function ondata(chunk) {
+    debug(\'ondata\');
+    var ret = dest.write(chunk);
+    if (false === ret) {
+      // If the user unpiped during `dest.write()`, it is possible
+  // to get stuck in a permanently paused state if that write
+      // also returned false.
+      if (state.pipesCount === 1 &&
+          state.pipes[0] === dest &&
+          src.listenerCount(\'data\') === 1 &&
+          !cleanedUp) {
+        debug(\'false write response, pause\', src._readableState.awaitDrain);
+        src._readableState.awaitDrain++;
+      }
+      src.pause();
+    }
+  }
+
+  // if the dest has an error, then stop piping into it.
+  // however, don\'t suppress the throwing behavior for this.
+  function onerror(er) {
+    debug(\'onerror\', er);
+    unpipe();
+    dest.removeListener(\'error\', onerror);
+    if (EE.listenerCount(dest, \'error\') === 0)
+      dest.emit(\'error\', er);
+  }
+  // This is a brutally ugly hack to make sure that our error handler
+  // is attached before any userland ones.  NEVER DO THIS.
+  if (!dest._events || !dest._events.error)
+    dest.on(\'error\', onerror);
+  else if (Array.isArray(dest._events.error))
+    dest._events.error.unshift(onerror);
+  else
+    dest._events.error = [onerror, dest._events.error];
+
+
+  // Both close and finish should trigger unpipe, but only once.
+  function onclose() {
+    dest.removeListener(\'finish\', onfinish);
+    unpipe();
+  }
+  dest.once(\'close\', onclose);
+  function onfinish() {
+    debug(\'onfinish\');
+   dest.removeListener(\'close\', onclose);
+    unpipe();
+  }
+  dest.once(\'finish\', onfinish);
+
+  function unpipe() {
+    debug(\'unpipe\');
+    src.unpipe(dest);
+  }
+
+  // tell the dest that it\'s being piped to
+  dest.emit(\'pipe\', src);
+
+  // start the flow if it hasn\'t been started already.
+  if (!state.flowing) {
+    debug(\'pipe resume\');
+    src.resume();
+  }
+
+  return dest;
+}
