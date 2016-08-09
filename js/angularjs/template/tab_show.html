@@ -1,0 +1,26 @@
+<div ng-model="data"> 
+    <table> 
+        <thead>
+            <tr>
+                <th class="text-nowrap" ng-repeat="h in data.head" ng-bind="h"></th>
+            </tr>
+        </thead>
+
+        <tbody>
+            <tr ng-repeat="row in data.rows">
+                <td ng-repeat="d in row" ng-bind="$index"> </td>
+                <td ng-if="change || delete" > 
+                    <input  type="button" value="修改" ng-click="mychange($index)"/>
+                    <input  type="button" value="删除" ng-click="delete($index)"/> 
+                   {{$index}}
+                </td>
+            </tr>
+        </tbody>
+
+        <tfoot>
+            <tr>
+            </tr>
+        </tfoot>
+    </table>
+</div>
+
