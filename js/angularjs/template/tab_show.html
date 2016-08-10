@@ -1,26 +1,49 @@
-<div ng-model="data"> 
-    <table> 
-        <thead>
+<div name="resultTable" ng-show="paging.total_items > 0">
+    <table class="table">
+        <thead style="white-space:nowrap;">
             <tr>
-                <th class="text-nowrap" ng-repeat="h in data.head" ng-bind="h"></th>
+                <th class="text-nowrap" ng-repeat="h in data.head track by $index" ng-bind="h"></th>
             </tr>
         </thead>
 
-        <tbody>
+        <tbody style="white-space:nowrap;">
             <tr ng-repeat="row in data.rows">
-                <td ng-repeat="d in row" ng-bind="$index"> </td>
-                <td ng-if="change || delete" > 
-                    <input  type="button" value="修改" ng-click="mychange($index)"/>
-                    <input  type="button" value="删除" ng-click="delete($index)"/> 
-                   {{$index}}
+                <td ng-repeat="d in row track by $index" ng-bind="d"> </td>
+                <td ng-if="change_flag || delete_flag" >
+                    <input ng-if="change_flag" type="button" value="修改" ng-click="mychange($index)"/>
+                    <input ng-if="delete_flag" type="button" value="删除" ng-click="mydelete($index)"/>
                 </td>
             </tr>
         </tbody>
+        <tfoot style="white-space:nowrap;">
 
-        <tfoot>
-            <tr>
-            </tr>
         </tfoot>
     </table>
+    <!-- pagination -->
+    <div class="xd-contentData-foot">
+        <div class="col-sm-12">
+            <div class="pull-left">
+                共{{paging.total_items}}条数据 &nbsp; 共{{paging.total_pages}}页 &nbsp;当前第{{paging.page}}页
+            </div>
+            <div class="pull-right">
+                <ul class="pagination pagination-sm pull-right" style="margin:0px;">
+                    <li ng-class="{disabled:noPre()}">
+                        <a href ng-click="selectPage(1)">首页</a>
+                    </li>
+                    <li ng-class="{disabled:noPre()}">
+                        <a href ng-click="selectPage(paging.page-1)">上一页</a>
+                    </li>
+                    <li ng-class="{disabled:noNex()}">
+                        <a href ng-click="selectPage(paging.page+1)">下一页</a>
+                    </li>
+                    <li ng-class="{disabled:noNex()}">
+                        <a href ng-click="selectPage(paging.total_pages)">尾页</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+    <!-- pagination end -->
+
 </div>
 

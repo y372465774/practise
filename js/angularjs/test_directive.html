@@ -20,28 +20,64 @@
 
     }]);
     app.directive("tabShow", function() {
-
         //var ctrl = function($scope){
         //    console.log("run in ctrl",$scope);
         //}
         //controller:ctrl,
+
         var _link = function(scope,ele,attr){
-            console.log("run in _link",scope,ele,attr);
+
+            console.log('scope',scope);
+
+            if (attr.change){
+                scope.change_flag = true;
+            }
+            if (attr.delete){
+                scope.delete_flag = true;
+            }
+
             scope.mychange=function(index){
-                console.log(scope.change.toString())
                 scope.change({index:index});
             }
+            scope.mydelete=function(index){
+                scope.delete({index:index});
+            }
+
+            //  pagination
+            if(attr.paging){
+                if (! {}.hasOwnProperty.call(scope.paging,'total_items')){
+                    scope.paging['total_items'] = 0;
+                }
+            }
+            scope.noPre = function(){
+                return scope.paging.page === 1;
+            }
+            scope.noNex = function(){
+                return scope.paging.page === scope.paging.total_pages;
+            }
+            scope.selectPage = function(page){
+                //console.log('selectPage',page);
+                //scope.apply(function(){
+                //    scope.paging.page = page;
+                //});
+                scope.paging.page = page;
+                scope.search();
+            }
+            //  pagination  end
         }
         return {
             restrict:'E',
             replace:true,
             scope:{ data:'=',
+                    paging:'=',
                     change:'&',
                     delete:'&',
+                    search:'&',
                   },
             link:_link,
-            templateUrl:'template/tab_show.html'
+            templateUrl:'assets/template/ysp-table.html'
             };
+
 });
     </script>
 </head>
