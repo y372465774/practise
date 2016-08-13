@@ -17,6 +17,7 @@
             console.log(index)
             alert(index)
         }
+        $scope.date_='2016-08-12';
 
     }]);
     app.directive("tabShow", function() {
@@ -75,17 +76,71 @@
                     search:'&',
                   },
             link:_link,
-            templateUrl:'assets/template/ysp-table.html'
+            templateUrl:'template/tab_show.html'
             };
+    });
+    app.directive("myDate", function() {
 
-});
+        var _link = function(scope,ele,attr,ngModelCtrl){
+            console.log("scope",scope);
+            console.log("scope $$watchers",scope.$$watchers);
+            // ngModelCtrl.$viewValue ==($formatters)==> ngModelCtrl.$modelValue  
+            // ngModelCtrl.$modelValue ==($parsers)==> ngModelCtrl.$viewValue 
+            ngModelCtrl.$formatters.push(function(modelValue){
+            // 1
+                console.log("modelValue",modelValue)
+                return new Date(modelValue)
+            })
+
+            ngModelCtrl.$parsers.push(function(viewValue){
+            // 4
+                console.log("viewValue",viewValue)
+                //return viewValue
+                return viewValue.getFullYear() + '-' + (viewValue.getMonth()+1) + '-' + viewValue.getDate();
+            })
+
+            // ngModelCtrl.$viewValue ==($render)===>directive template
+            ngModelCtrl.$render = function(){
+            // 2
+                console.log("$render",ngModelCtrl.$viewValue)
+                scope._date = ngModelCtrl.$viewValue;
+
+            }
+            // directive template ==(watch+setViewValue)===> ngModelCtrl.$viewValue
+            scope.$watch('_date',function(){
+            // 3
+                console.log("watch",scope._date)
+                //_date = scope._date.getFullYear() + '-' + (scope._date.getMonth()+1) + '-' + scope._date.getDate();
+                //ngModelCtrl.$setViewValue(_date);
+                ngModelCtrl.$setViewValue(scope._date);
+            });
+            console.log("scope $$watchers 2",scope.$$watchers);
+
+
+        }
+        return {
+           restrict:'E',
+           replace:true,
+           require: 'ngModel',
+           scope:{},
+           link:_link,
+           template:'<div><input type="date"  ng-model="_date" /></div> '
+           };
+    });
+
     </script>
 </head>
 
 <body>
     <div ng-controller="mainCtrl">
+        <!--
         <tab-show data="data" change="change(index)">
         </tab-show>
+        -->
+
+        <my-date ng-model="date_" require>
+        </my-date>
+        <input type="text" ng-model="date_" />
     </div>
 </body>
 
