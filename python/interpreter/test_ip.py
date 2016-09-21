@@ -35,6 +35,7 @@ def test(code,vm=None):
 
 
 if '__main__' == __name__:
+
     test("""\
         a = 6
         b = 2
