@@ -5,7 +5,7 @@ import operator
 import dis
 
 u"""
-    1
+    2  条件判断
     基于栈的 解释器
 """
 
@@ -21,6 +21,10 @@ class FlyMachine(object):
         self.ip = 0
         #本地变量
         self._locals = {}
+
+
+        #block 块 目前不知道什么用
+        self._block = []
 
     def top(self):
         u""" 栈顶  """
@@ -41,6 +45,18 @@ class FlyMachine(object):
     def push(self,value):
         u""" 入栈  """
         return self.stack.append(value)
+
+
+    def jump(self,jump):
+        u""" 指令跳转,指针改变  """
+        self.ip = jump
+
+    def delta_jump(self,jump):
+        u""" 
+            JUMP_FORWARD(delta)¶
+                Increments bytecode counter by delta  
+        """
+        self.ip += jump
 
     def parse_byte_and_args(self):
         u"""
@@ -68,7 +84,8 @@ class FlyMachine(object):
             elif byteCode in dis.haslocal:
                 arg = self.code.co_varnames[intArg]
             else:
-                raise ValueError(u"现在还不支持更多的操作")
+                arg = intArg
+                #raise ValueError(u"现在还不支持更多的操作")
             argument = [arg]
 
         return byteName,argument,ip
@@ -132,11 +149,38 @@ class FlyMachine(object):
         'XOR':      operator.xor,
         'OR':       operator.or_,
     }
-
+    
     def binaryOperator(self,op):
         u"""  二元 操作  """
         x,y = self.popn(2)
         self.push(self.BINARY_OPERATORS[op](x,y))
+
+
+    #比较操作
+    COMPARE_OPERATORS = [
+        operator.lt,
+        operator.le,
+        operator.eq,
+        operator.ne,
+        operator.gt,
+        operator.ge,
+        lambda x, y: x in y,
+        lambda x, y: x not in y,
+        lambda x, y: x is y,
+        lambda x, y: x is not y,
+        lambda x, y: issubclass(x, Exception) and issubclass(x, y),
+    ]
+
+    def COMPARE_OP(self, opnum):
+        x, y = self.popn(2)
+        self.push(self.COMPARE_OPERATORS[opnum](x, y))
+
+
+    #Building
+    def BUILD_LIST(self,count):
+        ls = self.popn(count)
+        self.push(ls)
+
 
     # 打印
     def PRINT_ITEM(self):
@@ -146,6 +190,42 @@ class FlyMachine(object):
     def PRINT_NEWLINE(self):
         print("")
 
+
+    # 跳转
+    def JUMP_FORWARD(self,jump):
+        self.delta_jump(jump)
+        #self.jump(jump)
+
+    def JUMP_ABSOLUTE(self,jump):
+        self.jump(jump)
+
+
+    def POP_JUMP_IF_FALSE(self,jump):
+        val = self.pop()
+        if not val:
+            self.jump(jump)
+
+
+    #Blocks 块
+    def SETUP_LOOP(self,dest):
+        self._block.append(('loop',dest))
+
+    def POP_BLOCK(self):
+        self._block.pop()
+
+    def GET_ITER(self):
+        self.push(iter(self.pop()))
+
+    def FOR_ITER(self,jump):
+        iterobj = self.top()
+        try:
+            v = next(iterobj)
+            self.push(v)
+        except StopIteration:
+            self.pop()
+            self.delta_jump(jump)
+   
+    
     # 结束
     def RETURN_VALUE(self):
         u"""  over  """
@@ -156,40 +236,32 @@ class FlyMachine(object):
 
 
 if __name__ == '__main__':
-    a = 6
-    b = 2
-    c = (a+a)*(a/b) - a
-    print(c)
-    print(a + b)
-    print(a - b)
-    print(a * b)
-    print(a / b)
-    print(a ** b)
-    print(a % b)
-    print(a << b)
-    print(a >> b)
-    print(a&b)
-    print(a|b)
-    print(a^b)
-
-    print("============")
 
     import test_ip
     test_ip.test("""\
-        a = 6
-        b = 2
-        c = (a+a)*(a/b) - a
-        print(c)
-        print(a + b)
-        print(a - b)
-        print(a * b)
-        print(a / b)
-        print(a ** b)
-        print(a % b)
-        print(a << b)
-        print(a >> b)
-        print(a&b)
-        print(a|b)
-        print(a^b)
-    """,vm = FlyMachine())
+        x = 1
+        y = 2
+        #z,z=[2,3]
+
+        if x > y:
+            print (x)
+        elif x == 2:
+            print (2)
+        else:
+            print('y')
+            print(y)
+
+        print('>--------while----------<')
+
+        i = 0
+        while i < 10:
+            i = i + 1
+            print i
+
+        print('>--------for----------<')
+        for i in [1,2,3,4]:
+            print i
+        
+
+   """,vm = FlyMachine())
     pass
