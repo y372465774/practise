@@ -5,10 +5,15 @@ import operator
 import dis
 import types
 import inspect
+import sys
+reload(sys)
+sys.setdefaultencoding('utf-8')
 
 u"""
     3  函数
     基于栈的 解释器
+
+
 python 代码的编译结果就是 PyCodeObject
 typedef struct {
 
@@ -53,14 +58,16 @@ typedef struct {
 
 def make_cell(value):
     u""" 待研究 """
-    # Thanks to Alex Gaynor for help with this bit of twistiness.
-    # Construct an actual cell object by creating a closure right here,
-    # and grabbing the cell object out of the function we create.
+    # Thanks to Alex Gaynor for help with this bit of twistiness.#=> 曲折
+    # Construct an actual cell object by creating a closure right here, # 构造一个真的闭包cell
+    # and grabbing the cell object out of the function we create.#不会在创造该函数结束时被回收
     fn = (lambda x: lambda: x)(value)
-    if PY3:
-        return fn.__closure__[0]
-    else:
-        return fn.func_closure[0]
+    #if PY3:
+    #    return fn.__closure__[0]
+    #else:
+    #    return fn.func_closure[0]
+    print (fn.func_closure,value,fn)
+    return fn.func_closure[0]
 
 class Method(object):
     def __init__(self, obj, _class, func):
@@ -90,7 +97,7 @@ class Cell(object):
     """
     def __init__(self,value):
         
-        self.contents = vlaue
+        self.contents = value
 
     def get(self):
         return self.contents
@@ -132,7 +139,9 @@ class Function(object):
             'argdefs': self.func_defaults,
         }
         if closure:
-            kw['closure'] = tuple(make_cell(0) for _ in closure)
+            _test =  tuple(make_cell(0) for _ in closure)
+            print ("test. what's this :",_test)
+            kw['closure'] = _test#tuple(make_cell(0) for _ in closure)
         self._func = types.FunctionType(code, globs, **kw)
         
     def __repr__(self):         # pragma: no cover
@@ -160,7 +169,9 @@ class Function(object):
         #    callargs = {".0": args[0]}
         #else:
         #    callargs = inspect.getcallargs(self._func, *args, **kwargs)
-        callargs = inspect.getcallargs(self._func, *args, **kwargs) #参数检查,个数等
+        callargs = inspect.getcallargs(self._func, *args, **kwargs) #参数匹配检查,个数等
+
+        print("callargs -- __call__",callargs)
 
         frame = self._vm.make_frame(
             self.func_code, callargs, self.func_globals, {}
@@ -202,6 +213,7 @@ class Frame(object):
             if not f_back.cells:
                 f_back.cells = {}
             for var in f_code.co_cellvars:
+                print(u"内部嵌套函数 引用变量: ",var)
                 cell = Cell(self.f_locals.get(var))
                 f_back.cells[var] = self.cells[var] = cell
         else:
@@ -302,6 +314,8 @@ class FlyMachine(object):
         u"""
             每次解释 1-3个字节:
                 指令 [参数]
+                指令一个字节 -> 8位  所以理论上可以有256个
+                参数2位 -> 16位 所以理论上寻址可以达到 65536个
         """
 
         f = self.frame
@@ -337,6 +351,7 @@ class FlyMachine(object):
             elif byteCode in dis.haslocal:
                 arg = f.f_code.co_varnames[intArg]
             else:
+                #整数常量
                 arg = intArg
             argument = [arg]
 
@@ -383,9 +398,9 @@ class FlyMachine(object):
 
         while 1:
             byteName,arguments,ip = self.parse_byte_and_args()
-            print ("-------",byteName,arguments,ip)
+            #print ("-------",byteName,arguments,ip)
             ret = self.dispatch(byteName,arguments)
-            print ("<---ret---->",ret)
+            #print ("<---ret---->",ret)
             if ret == 'return':
                 break
 
@@ -425,6 +440,20 @@ class FlyMachine(object):
         u"""  函数调用  """
         return self.call_function(arg,[],{})
 
+    def CALL_FUNCTION_VAR(self,arg):
+        u"""  函数调用  """
+        args = self.pop()
+        return self.call_function(arg,args,{})
+
+    def CALL_FUNCTION_KW(self,arg):
+        u"""  函数调用  """
+        kwargs = self.pop()
+        return self.call_function(arg,[],kwargs)
+
+    def CALL_FUNCTION_VAR_KW(self,arg):
+        u"""  函数调用  """
+        args,kwargs = self.popn(2)
+        return self.call_function(arg,args,kwargs)
 
     def call_function(self,arg,args,kwargs):
         u"""
@@ -445,7 +474,7 @@ class FlyMachine(object):
         frame = self.frame
 
         #调用类的方法
-        # func.im_self:所属对象  func.im_class 所属类
+        # func.im_self: 函数所属对象  func.im_class: 函数所属类
         if hasattr(func,'im_func'):
             # Methods get self as an implicit first parameter.
             if func.im_self:
@@ -465,6 +494,22 @@ class FlyMachine(object):
         retval = func(*posargs,**namedargs)
         self.push(retval)
 
+    def MAKE_CLOSURE(self, argc):
+        u"""  闭包函数   """
+        #if PY3:
+        #    # TODO: the py3 docs don't mention this change.
+        #    name = self.pop()
+        #else:
+        #    name = None
+        name = None
+        closure, code = self.popn(2)
+        defaults = self.popn(argc)
+        globs = self.frame.f_globals
+        fn = Function(name, code, globs, defaults, closure, self)
+        self.push(fn)
+
+
+
     # 栈的维护
 
     def LOAD_CONST(self,const):
@@ -472,6 +517,7 @@ class FlyMachine(object):
 
     def POP_TOP(self):
         self.pop()
+
 
     #names 维护
 
@@ -512,6 +558,17 @@ class FlyMachine(object):
         else:
             raise NameError("global name '%s' is not defined" % name)
         self.push(val)
+
+    def STORE_DEREF(self,name):
+        self.frame.cells[name].set(self.pop())
+
+    def LOAD_CLOSURE(self,name):
+        self.push(self.frame.cells[name])
+
+    def LOAD_DEREF(self, name):
+        self.push(self.frame.cells[name].get())
+
+
 
 
     # 二元 操作 ? => 三元?-> if else
@@ -558,13 +615,26 @@ class FlyMachine(object):
         self.push(self.COMPARE_OPERATORS[opnum](x, y))
 
 
+    #Attrbutes and indexing 获取属性 索引查找
+    def LOAD_ATTR(self, attr):
+        obj = self.pop()
+        val = getattr(obj, attr)
+        self.push(val)
+
+   
+
     #Building
+    def BUILD_TUPLE(self, count):
+        tp = self.popn(count)
+        self.push(tuple(tp))
+
+   
     def BUILD_LIST(self,count):
         ls = self.popn(count)
         self.push(ls)
 
 
-    # 打印
+    # Print 打印
     def PRINT_ITEM(self):
         item = self.pop()
         print(item,end="")
@@ -573,7 +643,7 @@ class FlyMachine(object):
         print("")
 
 
-    # 跳转
+    # JUMP 跳转
     def JUMP_FORWARD(self,jump):
         self.delta_jump(jump)
         #self.jump(jump)
@@ -616,23 +686,104 @@ class FlyMachine(object):
         return "return"
         
 
+    #导入 import 
+    def IMPORT_NAME(self,name):
+        u"""
+            import name 
+
+            level : 导入层级 >> -1 代表绝对导入或相对导入.  0,1,2表示导入包目录层级.
+            fromlist : gives the names of objects or submodules that should be imported from the module given by name
+        """
+        level,fromlist = self.popn(2)
+        frame = self.frame
+        self.push(
+            __import__(name,frame.f_globals,frame.f_locals,fromlist,level)
+        )
+
+    def IMPORT_FROM(self,name):
+        u"""
+            from xx import name
+        """
+        mod = self.top()
+        self.push(getattr(mod,name))
+
+    def IMPORT_STAR(self):
+        u"""
+            from xx import *
+        """
+        #TODO 没有使用 __all__ 属性
+        mod = self.pop()
+        frame = self.frame
+        for attr in dir(mod):
+            if attr[0] != '_':
+                frame.frame.f_locals[attr] = getattr(mod,attr)
+
+
 
 if __name__ == '__main__':
 
     import test_ip
     test_ip.test("""\
-        g = 1
-        def test(a):
-            c = a + g
-            print c,a,g
-            return c
+        #g = 1
+        #def test(a):
+        #    c = a + g
+        #    print c,a,g
+        #    return c
 
-        d = test(1)
+        #d = test(1)
 
-        def first(a,b=[],c=1,d=2):
-            test(a)
-            print "first"
-        first(d)
+        #def first(a,b=[],c=1,d=2):
+        #    test(a)
+        #    print "first"
+        #first(d)
+
+        #print("=========closure============")
+
+        #def dec(func):
+        #    print("....dec....")
+        #    rc = []
+        #    g = 1
+        #    gg = 1
+        #    def wrap(*arg,**kv):
+        #        rt = func(*arg,**kv)
+        #        rc.append(rt)
+        #        print g
+        #        gg = 2 # error gg += 2
+        #        return rt
+        #    return wrap
+
+        ##def f():
+        ##    return 1
+
+        ##f = dec(f)
+        ##print f()
+
+        #@dec
+        #def m():
+        #    return 1
+
+        #print m()
+        import time
+        print time.time()
+
+        aa = 'a'
+        b = 10
+        c = 1000
+        d = 999999999999
+
+        #class T(object):
+        #    def t(self):
+        #        print 'i am test'
+
+        print("======= yield===========")
+
+        def yd():
+            yield 1
+            yield 2
+        y = yd()
+        print(y.next())
+        print(y.nect())
+
        
 
    """,vm = FlyMachine())

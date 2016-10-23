@@ -28,7 +28,9 @@ def test(code,vm=None):
     
     code = compile(code,"<test>","exec",0,1)
     
-    #dis_code(code)
+    dis_code(code)
+
+    print (">-------------------------<")
 
     if vm:
         vm.run_code(code)
@@ -37,29 +39,16 @@ def test(code,vm=None):
 if '__main__' == __name__:
 
     test("""\
-        a = 6
-        b = 2
-        print a + b
-        print a - b
-        print a * b
-        print a / b
-        print a ** b
-        print a % b
-        print a << b
-        print a >> b
-        print a&b
-        print a|b
-        print a^b
+        g = 1
+        def test(a):
+            c = a + g
+            print c,a,g
 
-        #x = 1
-        #y = 2
-        #c = x + y
-        #f = x - y
-        #d = x * y
-        #e = y / x
-        #def f():
-        #    g = 1
-        #    return g
-        #f()
+        test(1)
+
+        def first():
+            print "first"
+        first()
+
     """)
 
